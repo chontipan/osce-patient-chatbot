@@ -134,12 +134,39 @@ function selectCase(caseId) {
 }
 
 function updatePatientHeader(c) {
-  const avatarUrl = getPatientAvatarUrl(c);
-  el.patientAvatar.innerHTML = `<img src="${avatarUrl}" alt="${escapeHtml(c.patient.name)}" />`;
+  renderPatientAvatar(c, 0);
   el.patientName.textContent = c.patient.name;
   el.patientDemographics.textContent = `${c.patient.gender} • ${c.patient.age} ปี`;
   el.patientOccupation.textContent = `อาชีพ: ${c.patient.occupation || '-'}`;
   el.patientPersonality.textContent = c.patient.personality || '-';
+}
+
+function renderPatientAvatar(c, mouthState = 0) {
+  if (!c) return;
+  const savedUrl = c.patient?.avatarUrl || '';
+  if (savedUrl && savedUrl.startsWith('http')) {
+    const mouthSizes = [
+      { w: 12, h: 0 },
+      { w: 13, h: 4 },
+      { w: 15, h: 8 },
+      { w: 10, h: 9 }
+    ];
+    const m = mouthSizes[mouthState % mouthSizes.length];
+    const overlay =
+      mouthState > 0
+        ? `<div class="photo-mouth-overlay" style="width:${m.w}px;height:${m.h}px;"></div>`
+        : '';
+    el.patientAvatar.innerHTML = `<img src="${savedUrl}" alt="${escapeHtml(c.patient.name)}" />${overlay}`;
+  } else {
+    el.patientAvatar.innerHTML = generateSvgPortrait({
+      name: c.patient.name,
+      age: c.patient.age,
+      gender: c.patient.gender,
+      seed: c.patient.faceSeed || 1,
+      mouthState,
+      rawSvg: true
+    });
+  }
 }
 
 function resetSession() {
@@ -236,7 +263,12 @@ async function sendMessage(textOverride) {
         state.checklistProgress = data.checklistProgress;
         renderChecklist();
       }
-      if (state.autoTTS) speakThai(data.reply);
+      if (state.autoTTS) {
+        speakThai(data.reply);
+      } else {
+        const cleanLen = data.reply.replace(/\([^)]*\)/g, '').trim().length;
+        startTalkingAnimation(Math.min(4500, Math.max(1400, cleanLen * 45)));
+      }
     }
   } catch (err) {
     state.messages.push({ role: 'assistant', content: `⚠️ เชื่อมต่อเซิร์ฟเวอร์ไม่ได้: ${err.message}` });
@@ -277,14 +309,61 @@ function stopTimer() {
   }
 }
 
+let talkingInterval = null;
+let talkingTimeout = null;
+
+function stopTalkingAnimation() {
+  if (talkingInterval) {
+    clearInterval(talkingInterval);
+    talkingInterval = null;
+  }
+  if (talkingTimeout) {
+    clearTimeout(talkingTimeout);
+    talkingTimeout = null;
+  }
+  el.patientAvatar.classList.remove('speaking');
+  document.getElementById('speakingPill')?.classList.add('hidden');
+  renderPatientAvatar(getActiveCase(), 0);
+}
+
+function startTalkingAnimation(durationMs = 2500) {
+  stopTalkingAnimation();
+  const c = getActiveCase();
+  if (!c) return;
+
+  const sequence = [1, 2, 1, 3, 2, 0, 1, 2];
+  let step = 0;
+
+  el.patientAvatar.classList.add('speaking');
+  document.getElementById('speakingPill')?.classList.remove('hidden');
+
+  talkingInterval = setInterval(() => {
+    const active = getActiveCase();
+    if (!active) return stopTalkingAnimation();
+    renderPatientAvatar(active, sequence[step % sequence.length]);
+    step += 1;
+  }, 115);
+
+  if (durationMs > 0) {
+    talkingTimeout = setTimeout(stopTalkingAnimation, durationMs);
+  }
+}
+
 // Speech (TTS & STT)
 function speakThai(text) {
-  if (!('speechSynthesis' in window)) return;
+  if (!('speechSynthesis' in window)) {
+    startTalkingAnimation(2500);
+    return;
+  }
   window.speechSynthesis.cancel();
   const clean = text.replace(/\([^)]*\)/g, '').trim();
   const utter = new SpeechSynthesisUtterance(clean);
   utter.lang = 'th-TH';
   utter.rate = 1.0;
+  utter.onstart = () => startTalkingAnimation(0);
+  utter.onend = () => stopTalkingAnimation();
+  utter.onerror = () => stopTalkingAnimation();
+  startTalkingAnimation(Math.min(6000, Math.max(1500, clean.length * 65)));
   window.speechSynthesis.speak(utter);
 }
 
@@ -651,7 +730,7 @@ function hashString(str = '') {
   return Math.abs(h);
 }
 
-function generateSvgPortrait({ name = 'Patient', age = 32, gender = 'หญิง', seed = 0 }) {
+function generateSvgPortrait({ name = 'Patient', age = 32, gender = 'หญิง', seed = 0, mouthState = 0, rawSvg = false }) {
   const h = hashString(`${name}-${age}-${gender}-${seed}`);
   const skinTones = ['#f7d3b5', '#efc29e', '#e5b28a', '#d9a077'];
   const bgColors = ['#ccfbf1', '#e0f2fe', '#fef3c7', '#ede9fe', '#dcfce7'];
@@ -706,6 +785,14 @@ function generateSvgPortrait({ name = 'Patient', age = 32, gender = 'หญิ�
        <line x1="94" y1="103" x2="106" y2="103" stroke="#334155" stroke-width="2"/>`
     : '';
 
+  const mouths = [
+    `<path d="M89 130 Q100 125 111 130" stroke="#9f1239" stroke-width="2.5" fill="none" stroke-linecap="round"/>`,
+    `<ellipse cx="100" cy="129" rx="8" ry="3.2" fill="#7f1d1d" stroke="#9f1239" stroke-width="1.5"/>`,
+    `<ellipse cx="100" cy="130" rx="10" ry="6" fill="#7f1d1d" stroke="#9f1239" stroke-width="1.6"/><path d="M93 127 Q100 129 107 127" stroke="#ffffff" stroke-width="1.5" fill="none"/>`,
+    `<ellipse cx="100" cy="130" rx="6" ry="6.5" fill="#7f1d1d" stroke="#9f1239" stroke-width="1.6"/>`
+  ];
+  const mouthSvg = mouths[mouthState % mouths.length];
+
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200">
     <rect width="200" height="200" fill="${bg}"/>
     ${hairBack}
@@ -722,12 +809,12 @@ function generateSvgPortrait({ name = 'Patient', age = 32, gender = 'หญิ�
     <circle cx="83.5" cy="102.5" r="1.3" fill="#ffffff"/>
     <circle cx="119.5" cy="102.5" r="1.3" fill="#ffffff"/>
     <path d="M100 105 L97 118 Q100 121 103 118" stroke="#b9825c" stroke-width="2" fill="none" stroke-linecap="round"/>
-    <path d="M89 130 Q100 125 111 130" stroke="#9f1239" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+    ${mouthSvg}
     ${wrinkles}
     ${glasses}
   </svg>`;
 
-  return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+  return rawSvg ? svg : `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
 }
 
 function getPatientAvatarUrl(c) {
@@ -823,6 +910,7 @@ document.getElementById('savePersonaBtn').addEventListener('click', async () => 
   c.patient.occupation = document.getElementById('personaOccupationInput').value.trim();
   c.patient.personality = document.getElementById('personaTraitInput').value.trim();
   c.patient.avatarUrl = currentPersonaAvatarUrl;
+  c.patient.faceSeed = faceSeed;
 
   const res = await fetch('/api/cases', {
     method: 'POST',
