@@ -1,0 +1,12 @@
+{
+  "name": "osce-patient-chatbot",
+  "version": "1.0.0",
+  "description": "Simulated Patient Chatbot for Medical OSCE History Taking Practice",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

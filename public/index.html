@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>OSCE Patient Sim - ระบบผู้ป่วยจำลองสำหรับฝึกซักประวัติแพทย์</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-icon">🩺</div>
+        <div>
+          <h1>OSCE Patient Sim</h1>
+          <p>ฝึกซักประวัติผู้ป่วยจำลอง</p>
+        </div>
+      </div>
+
+      <div class="mode-card" id="modeCard">
+        <div>
+          <span class="mode-label">โหมดการทำงาน</span>
+          <strong id="modeStatusText">Offline (ตามบท/คีย์เวิร์ด)</strong>
+        </div>
+        <button class="btn-icon" id="openSettingsBtn" title="ตั้งค่า AI / API Key">⚙️</button>
+      </div>
+
+      <div class="sidebar-section">
+        <div class="section-header">
+          <span>เคสผู้ป่วยจำลอง</span>
+          <button class="btn-small btn-primary" id="newCaseBtn">+ สร้างตัวละคร</button>
+        </div>
+        <div class="case-list" id="caseList"></div>
+      </div>
+
+      <div class="sidebar-section checklist-section">
+        <div class="section-header">
+          <span>OSCE Checklist (<span id="checklistCount">0/0</span>)</span>
+          <button class="btn-link" id="toggleChecklistBtn">ซ่อน</button>
+        </div>
+        <div class="checklist-body" id="checklistBody">
+          <ul class="checklist-items" id="checklistItems"></ul>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Main Chat Workspace -->
+    <main class="main-area">
+      <header class="topbar">
+        <div class="patient-summary">
+          <div class="avatar" id="patientAvatar">🧑</div>
+          <div>
+            <div class="patient-title-row">
+              <h2 id="patientName">เลือกเคสผู้ป่วย</h2>
+              <span class="badge" id="patientDemographics">-</span>
+            </div>
+            <p class="patient-occupation" id="patientOccupation">-</p>
+          </div>
+        </div>
+
+        <div class="topbar-actions">
+          <div class="timer-box" title="จับเวลาสถานี OSCE">
+            <span id="timerDisplay">08:00</span>
+            <button class="btn-icon" id="timerToggleBtn" title="เริ่ม/หยุดเวลา">▶️</button>
+            <button class="btn-icon" id="timerResetBtn" title="รีเซ็ตเวลา">🔄</button>
+          </div>
+          <button class="btn-secondary" id="resetChatBtn">เริ่มซักประวัติใหม่</button>
+          <button class="btn-success" id="finishExamBtn">จบการตรวจ &amp; ประเมินผล</button>
+        </div>
+      </header>
+
+      <div class="door-note" id="doorNote">
+        <strong>สังเกตอาการแรกรับ:</strong> <span id="patientPersonality">-</span>
+      </div>
+
+      <section class="chat-stream" id="chatStream"></section>
+
+      <div class="quick-prompts">
+        <span class="quick-label">คำถามด่วน:</span>
+        <button class="chip" data-msg="สวัสดีครับ/ค่ะ วันนี้ไม่สบายเป็นอะไรมาครับ/ค่ะ?">อาการสำคัญ</button>
+        <button class="chip" data-msg="อาการเริ่มเป็นตั้งแต่เมื่อไหร่ และลักษณะอาการเป็นอย่างไรครับ/ค่ะ?">ประวัติปัจจุบัน</button>
+        <button class="chip" data-msg="มีโรคประจำตัว หรือกินยาอะไรเป็นประจำไหมครับ/ค่ะ?">โรคประจำตัว/ยา</button>
+        <button class="chip" data-msg="มีประวัติแพ้ยาหรือแพ้อาหารไหมครับ/ค่ะ?">ประวัติแพ้ยา</button>
+        <button class="chip" data-msg="คนในครอบครัวมีใครป่วยคล้ายกันไหมครับ/ค่ะ?">ประวัติครอบครัว</button>
+        <button class="chip" data-msg="สูบบุหรี่หรือดื่มเครื่องดื่มแอลกอฮอล์ไหมครับ/ค่ะ?">ประวัติส่วนตัว</button>
+        <button class="chip" data-msg="ตอนนี้กังวลเรื่องอะไรเป็นพิเศษ หรืออยากให้หมอช่วยดูแลเรื่องไหนครับ/ค่ะ?">ICE (ความกังวล)</button>
+      </div>
+
+      <footer class="chat-input-bar">
+        <button class="btn-icon mic-btn" id="micBtn" title="พูดด้วยเสียง (ภาษาไทย)">🎤</button>
+        <button class="btn-icon tts-toggle" id="ttsToggleBtn" title="เปิด/ปิด เสียงพูดผู้ป่วยอัตโนมัติ">🔇</button>
+        <textarea id="chatInput" rows="1" placeholder="พิมพ์คำถามซักประวัติผู้ป่วยที่นี่... (กด Enter เพื่อส่ง, Shift+Enter ขึ้นบรรทัดใหม่)"></textarea>
+        <button class="btn-primary send-btn" id="sendBtn">ส่ง</button>
+      </footer>
+    </main>
+  </div>
+
+  <!-- Modal: AI Settings -->
+  <div class="modal-backdrop hidden" id="settingsModal">
+    <div class="modal">
+      <div class="modal-header">
+        <h3>ตั้งค่าโหมดตอบสนอง (AI / Scripted)</h3>
+        <button class="btn-icon close-modal" data-close="settingsModal">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label>เลือกโหมด</label>
+          <select id="aiModeSelect">
+            <option value="offline">Offline Mode (ตอบตามบทพูด &amp; คีย์เวิร์ด ไม่ต้องใช้ API Key)</option>
+            <option value="ai">AI Mode (LLM สวมบทบาทเป็นธรรมชาติ + ยึดตามบทที่กำหนด)</option>
+          </select>
+        </div>
+
+        <div id="aiConfigFields" class="hidden">
+          <div class="form-group">
+            <label>ผู้ให้บริการ AI</label>
+            <select id="aiProviderSelect">
+              <option value="gemini">Google Gemini API</option>
+              <option value="openai">OpenAI / OpenAI-Compatible API</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>API Key (เก็บในเบราว์เซอร์ของคุณเท่านั้น)</label>
+            <input type="password" id="aiApiKeyInput" placeholder="ใส่ API Key..." />
+          </div>
+          <div class="form-group">
+            <label>Model</label>
+            <input type="text" id="aiModelInput" placeholder="gemini-2.5-flash หรือ gpt-4o-mini" />
+          </div>
+          <div class="form-group hidden" id="openaiBaseUrlGroup">
+            <label>Base URL (สำหรับ OpenAI-Compatible)</label>
+            <input type="text" id="aiBaseUrlInput" placeholder="https://api.openai.com/v1" />
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-secondary close-modal" data-close="settingsModal">ยกเลิก</button>
+        <button class="btn-primary" id="saveSettingsBtn">บันทึกการตั้งค่า</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Character & Script Editor -->
+  <div class="modal-backdrop hidden" id="caseEditorModal">
+    <div class="modal modal-lg">
+      <div class="modal-header">
+        <h3 id="editorModalTitle">สร้างตัวละครผู้ป่วยจำลองใหม่</h3>
+        <button class="btn-icon close-modal" data-close="caseEditorModal">✕</button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="editCaseId" />
+        <div class="form-grid">
+          <div class="form-group">
+            <label>ชื่อเคส *</label>
+            <input type="text" id="editTitle" placeholder="เช่น เคส 4: ปวดศีรษะไมเกรน" />
+          </div>
+          <div class="form-group">
+            <label>เวลาสอบ (นาที)</label>
+            <input type="number" id="editMinutes" value="8" min="1" max="60" />
+          </div>
+          <div class="form-group">
+            <label>ชื่อตัวละครผู้ป่วย *</label>
+            <input type="text" id="editName" placeholder="เช่น คุณสุดา ใจงาม" />
+          </div>
+          <div class="form-group">
+            <label>อายุ (ปี)</label>
+            <input type="number" id="editAge" value="35" />
+          </div>
+          <div class="form-group">
+            <label>เพศ</label>
+            <input type="text" id="editGender" placeholder="ชาย / หญิง" />
+          </div>
+          <div class="form-group">
+            <label>อาชีพ</label>
+            <input type="text" id="editOccupation" placeholder="พนักงานออฟฟิศ" />
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label>เฉลยการวินิจฉัย (Diagnosis - ซ่อนไว้จนกว่าจะจบการตรวจ)</label>
+          <input type="text" id="editDiagnosis" placeholder="เช่น Migraine without aura" />
+        </div>
+        <div class="form-group">
+          <label>บุคลิก / ท่าทางสังเกตได้ (Door Note)</label>
+          <textarea id="editPersonality" rows="2" placeholder="เช่น กุมขมับ หลีกเลี่ยงแสงจ้า พูดเสียงเบา"></textarea>
+        </div>
+        <div class="form-group">
+          <label>บทเปิดเรื่อง (Opening Line)</label>
+          <textarea id="editOpeningLine" rows="2" placeholder="สิ่งที่ผู้ป่วยพูดทันทีที่เดินเข้าห้องตรวจ"></textarea>
+        </div>
+
+        <h4 class="sub-heading">ข้อมูลทางการแพทย์ (สำหรับให้ผู้ป่วยตอบตามประวัติ)</h4>
+        <div class="form-grid">
+          <div class="form-group">
+            <label>อาการสำคัญ (CC)</label>
+            <textarea id="editCC" rows="2"></textarea>
+          </div>
+          <div class="form-group">
+            <label>ประวัติปัจจุบัน (HPI)</label>
+            <textarea id="editHPI" rows="2"></textarea>
+          </div>
+          <div class="form-group">
+            <label>โรคประจำตัว (PMH)</label>
+            <textarea id="editPMH" rows="2"></textarea>
+          </div>
+          <div class="form-group">
+            <label>ยาที่ใช้ประจำ (Meds)</label>
+            <textarea id="editMeds" rows="2"></textarea>
+          </div>
+          <div class="form-group">
+            <label>ประวัติแพ้ยา (Allergies)</label>
+            <textarea id="editAllergies" rows="2"></textarea>
+          </div>
+          <div class="form-group">
+            <label>ประวัติครอบครัว (FH)</label>
+            <textarea id="editFH" rows="2"></textarea>
+          </div>
+          <div class="form-group">
+            <label>ประวัติส่วนตัว/สังคม (SH)</label>
+            <textarea id="editSH" rows="2"></textarea>
+          </div>
+          <div class="form-group">
+            <label>อาการตามระบบ (ROS)</label>
+            <textarea id="editROS" rows="2"></textarea>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>ความคิด/ความกังวล/ความคาดหวัง (ICE)</label>
+          <textarea id="editICE" rows="2"></textarea>
+        </div>
+
+        <div class="section-header">
+          <h4 class="sub-heading">บทพูดตามเงื่อนไข (Scripted Cues)</h4>
+          <button type="button" class="btn-small btn-secondary" id="addScriptRowBtn">+ เพิ่มบทพูด</button>
+        </div>
+        <p class="hint">กำหนดว่าถ้าหมอถามคำสำคัญเหล่านี้ ให้ตัวละครพูดตามบทที่กำหนด</p>
+        <div id="scriptRowsContainer"></div>
+
+        <div class="section-header" style="margin-top: 16px;">
+          <h4 class="sub-heading">OSCE Checklist สำหรับประเมินผล</h4>
+          <button type="button" class="btn-small btn-secondary" id="addChecklistRowBtn">+ เพิ่มข้อประเมิน</button>
+        </div>
+        <div id="checklistRowsContainer"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-secondary close-modal" data-close="caseEditorModal">ยกเลิก</button>
+        <button class="btn-primary" id="saveCaseBtn">บันทึกตัวละคร</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Evaluation -->
+  <div class="modal-backdrop hidden" id="evalModal">
+    <div class="modal modal-lg">
+      <div class="modal-header">
+        <h3>สรุปและประเมินผล OSCE</h3>
+        <button class="btn-icon close-modal" data-close="evalModal">✕</button>
+      </div>
+      <div class="modal-body">
+        <div id="evalInputPhase">
+          <p class="hint">กรอกการวินิจฉัยและแผนการดูแลรักษาเบื้องต้นของคุณก่อนดูเฉลยและผลประเมิน</p>
+          <div class="form-group">
+            <label>Working / Differential Diagnosis</label>
+            <textarea id="studentDiagnosisInput" rows="2" placeholder="ระบุโรคที่คิดถึงมากที่สุด และโรคที่ต้องแยก..."></textarea>
+          </div>
+          <div class="form-group">
+            <label>Initial Investigation &amp; Management Plan</label>
+            <textarea id="studentPlanInput" rows="3" placeholder="เช่น ส่งตรวจ EKG 12-lead, Troponin, ให้ Aspirin..."></textarea>
+          </div>
+          <button class="btn-success" id="submitEvalBtn" style="width: 100%;">ส่งคำตอบและดูผลประเมิน</button>
+        </div>
+
+        <div id="evalResultPhase" class="hidden">
+          <div class="score-banner">
+            <div>
+              <span>คะแนน Checklist การซักประวัติ</span>
+              <strong id="evalScoreText">0%</strong>
+            </div>
+            <div>
+              <span>เฉลย Diagnosis</span>
+              <strong id="evalActualDiagnosis">-</strong>
+            </div>
+          </div>
+
+          <h4 class="sub-heading">รายละเอียด Checklist</h4>
+          <ul class="eval-checklist" id="evalChecklist"></ul>
+
+          <div id="aiFeedbackBox" class="ai-feedback-box hidden">
+            <h4 class="sub-heading">ความเห็นจากอาจารย์ผู้คุมสอบ (AI Examiner)</h4>
+            <div id="aiFeedbackContent"></div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-primary close-modal" data-close="evalModal">ปิด</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
