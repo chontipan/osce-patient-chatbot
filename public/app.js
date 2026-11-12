@@ -128,13 +128,18 @@ function selectCase(caseId) {
   if (!c) return;
 
   renderCaseList();
-  el.patientAvatar.textContent = c.patient.gender === 'หญิง' ? '👩' : '👨';
+  updatePatientHeader(c);
+
+  resetSession();
+}
+
+function updatePatientHeader(c) {
+  const avatarUrl = getPatientAvatarUrl(c);
+  el.patientAvatar.innerHTML = `<img src="${avatarUrl}" alt="${escapeHtml(c.patient.name)}" />`;
   el.patientName.textContent = c.patient.name;
   el.patientDemographics.textContent = `${c.patient.gender} • ${c.patient.age} ปี`;
   el.patientOccupation.textContent = `อาชีพ: ${c.patient.occupation || '-'}`;
   el.patientPersonality.textContent = c.patient.personality || '-';
-
-  resetSession();
 }
 
 function resetSession() {
@@ -160,13 +165,18 @@ function resetSession() {
 
 function renderChat() {
   el.chatStream.innerHTML = '';
+  const activeCase = getActiveCase();
+  const avatarUrl = activeCase ? getPatientAvatarUrl(activeCase) : '';
   state.messages.forEach((m) => {
     const row = document.createElement('div');
     row.className = `msg-row ${m.role}`;
-    const senderLabel = m.role === 'user' ? '🩺 คุณหมอ (ผู้เข้าสอบ)' : `🧑 ${getActiveCase()?.patient.name || 'ผู้ป่วย'}`;
+    const senderHtml =
+      m.role === 'user'
+        ? '<span>🩺 คุณหมอ (ผู้เข้าสอบ)</span>'
+        : `<img class="msg-avatar" src="${avatarUrl}" alt="patient" /><span>${escapeHtml(activeCase?.patient.name || 'ผู้ป่วย')}</span>`;
     row.innerHTML = `
       <div class="msg-sender">
-        <span>${escapeHtml(senderLabel)}</span>
+        ${senderHtml}
         ${m.role === 'assistant' ? `<button class="btn-icon speak-btn" title="ฟังเสียง">🔊</button>` : ''}
       </div>
       <div class="msg-bubble">${escapeHtml(m.content)}</div>
@@ -471,6 +481,7 @@ el.saveCaseBtn.addEventListener('click', async () => {
     }))
     .filter((c) => c.label);
 
+  const existingCase = state.cases.find((c) => c.id === id);
   const payload = {
     id,
     title,
@@ -482,7 +493,8 @@ el.saveCaseBtn.addEventListener('click', async () => {
       gender: document.getElementById('editGender').value.trim() || 'ไม่ระบุ',
       occupation: document.getElementById('editOccupation').value.trim(),
       personality: document.getElementById('editPersonality').value.trim(),
-      openingLine: document.getElementById('editOpeningLine').value.trim()
+      openingLine: document.getElementById('editOpeningLine').value.trim(),
+      avatarUrl: existingCase?.patient?.avatarUrl || ''
     },
     medicalData: {
       cc: document.getElementById('editCC').value.trim(),
@@ -623,6 +635,208 @@ function escapeHtml(str = '') {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
 }
+
+// ==========================================
+// Persona & Patient Face Generator
+// ==========================================
+let currentPersonaAvatarUrl = '';
+let faceSeed = 1;
+
+function hashString(str = '') {
+  let h = 2166136261;
+  for (let i = 0; i < str.length; i++) {
+    h ^= str.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return Math.abs(h);
+}
+
+function generateSvgPortrait({ name = 'Patient', age = 32, gender = 'หญิง', seed = 0 }) {
+  const h = hashString(`${name}-${age}-${gender}-${seed}`);
+  const skinTones = ['#f7d3b5', '#efc29e', '#e5b28a', '#d9a077'];
+  const bgColors = ['#ccfbf1', '#e0f2fe', '#fef3c7', '#ede9fe', '#dcfce7'];
+  const shirtColors = ['#0f766e', '#0369a1', '#4338ca', '#b45309', '#be123c', '#334155'];
+
+  const skin = skinTones[h % skinTones.length];
+  const bg = bgColors[(h >> 2) % bgColors.length];
+  const shirt = shirtColors[(h >> 4) % shirtColors.length];
+  const isFemale = gender === 'หญิง';
+  const isElder = Number(age) >= 55;
+  const isMiddle = Number(age) >= 38 && Number(age) < 55;
+
+  const hairColors = isElder ? ['#94a3b8', '#cbd5e1', '#64748b'] : ['#1e293b', '#27272a', '#3f2e21'];
+  const hair = hairColors[(h >> 3) % hairColors.length];
+  const hasGlasses = (h % 3 === 0) || (isElder && h % 2 === 0);
+
+  let hairBack = '';
+  let hairFront = '';
+  if (isFemale) {
+    const style = h % 3;
+    if (style === 0) {
+      hairBack = `<path d="M55 92 Q50 155 62 175 L138 175 Q150 155 145 92 Z" fill="${hair}"/>`;
+      hairFront = `<path d="M58 88 Q100 44 142 88 Q130 66 100 66 Q70 66 58 88 Z" fill="${hair}"/>`;
+    } else if (style === 1) {
+      hairBack = `<circle cx="100" cy="52" r="22" fill="${hair}"/><ellipse cx="100" cy="88" rx="46" ry="44" fill="${hair}"/>`;
+      hairFront = `<path d="M60 84 Q100 50 140 84 Q115 62 100 68 Q85 62 60 84 Z" fill="${hair}"/>`;
+    } else {
+      hairBack = `<path d="M56 90 Q54 140 70 150 L130 150 Q146 140 144 90 Z" fill="${hair}"/>`;
+      hairFront = `<path d="M58 86 Q100 46 142 86 Q120 68 85 74 Q68 78 58 86 Z" fill="${hair}"/>`;
+    }
+  } else {
+    const style = h % 2;
+    if (style === 0) {
+      hairFront = `<path d="M60 88 Q62 48 100 46 Q138 48 140 88 Q125 64 100 64 Q75 64 60 88 Z" fill="${hair}"/>`;
+    } else {
+      hairFront = `<path d="M60 86 Q68 48 100 48 Q132 48 140 86 Q128 60 100 66 Q76 62 60 86 Z" fill="${hair}"/>`;
+    }
+  }
+
+  const wrinkles = isElder
+    ? `<path d="M78 122 Q74 128 77 134" stroke="#b9825c" stroke-width="1.5" fill="none"/>
+       <path d="M122 122 Q126 128 123 134" stroke="#b9825c" stroke-width="1.5" fill="none"/>
+       <path d="M84 82 Q100 79 116 82" stroke="#b9825c" stroke-width="1.2" fill="none"/>`
+    : isMiddle
+      ? `<path d="M80 124 Q77 129 79 133" stroke="#c28e6a" stroke-width="1.2" fill="none"/>
+         <path d="M120 124 Q123 129 121 133" stroke="#c28e6a" stroke-width="1.2" fill="none"/>`
+      : '';
+
+  const glasses = hasGlasses
+    ? `<rect x="70" y="96" width="24" height="16" rx="4" fill="none" stroke="#334155" stroke-width="2.2"/>
+       <rect x="106" y="96" width="24" height="16" rx="4" fill="none" stroke="#334155" stroke-width="2.2"/>
+       <line x1="94" y1="103" x2="106" y2="103" stroke="#334155" stroke-width="2"/>`
+    : '';
+
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200">
+    <rect width="200" height="200" fill="${bg}"/>
+    ${hairBack}
+    <path d="M42 200 Q48 154 100 154 Q152 154 158 200 Z" fill="${shirt}"/>
+    <rect x="86" y="135" width="28" height="26" rx="8" fill="${skin}"/>
+    <circle cx="62" cy="108" r="8" fill="${skin}"/>
+    <circle cx="138" cy="108" r="8" fill="${skin}"/>
+    <ellipse cx="100" cy="104" rx="38" ry="44" fill="${skin}"/>
+    ${hairFront}
+    <path d="M74 92 Q82 88 90 93" stroke="#1e293b" stroke-width="2.6" stroke-linecap="round" fill="none"/>
+    <path d="M110 93 Q118 88 126 92" stroke="#1e293b" stroke-width="2.6" stroke-linecap="round" fill="none"/>
+    <circle cx="82" cy="104" r="4" fill="#1e293b"/>
+    <circle cx="118" cy="104" r="4" fill="#1e293b"/>
+    <circle cx="83.5" cy="102.5" r="1.3" fill="#ffffff"/>
+    <circle cx="119.5" cy="102.5" r="1.3" fill="#ffffff"/>
+    <path d="M100 105 L97 118 Q100 121 103 118" stroke="#b9825c" stroke-width="2" fill="none" stroke-linecap="round"/>
+    <path d="M89 130 Q100 125 111 130" stroke="#9f1239" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+    ${wrinkles}
+    ${glasses}
+  </svg>`;
+
+  return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+}
+
+function getPatientAvatarUrl(c) {
+  if (c?.patient?.avatarUrl) return c.patient.avatarUrl;
+  return generateSvgPortrait({
+    name: c?.patient?.name || 'Patient',
+    age: c?.patient?.age || 32,
+    gender: c?.patient?.gender || 'หญิง',
+    seed: 1
+  });
+}
+
+function openPersonaModal() {
+  const c = getActiveCase();
+  if (!c) return;
+
+  document.getElementById('personaNameInput').value = c.patient.name || '';
+  document.getElementById('personaAgeInput').value = c.patient.age || 32;
+  document.getElementById('personaGenderInput').value = c.patient.gender === 'ชาย' ? 'ชาย' : 'หญิง';
+  document.getElementById('personaOccupationInput').value = c.patient.occupation || '';
+  document.getElementById('personaTraitInput').value = c.patient.personality || '';
+
+  currentPersonaAvatarUrl = getPatientAvatarUrl(c);
+  document.getElementById('personaFacePreview').src = currentPersonaAvatarUrl;
+  document.getElementById('faceGenStatus').textContent = '';
+
+  openModal('personaModal');
+}
+
+function refreshVectorFace(incrementSeed = false) {
+  if (incrementSeed) faceSeed += 1;
+  const name = document.getElementById('personaNameInput').value.trim() || 'Patient';
+  const age = Number(document.getElementById('personaAgeInput').value) || 32;
+  const gender = document.getElementById('personaGenderInput').value;
+  currentPersonaAvatarUrl = generateSvgPortrait({ name, age, gender, seed: faceSeed });
+  document.getElementById('personaFacePreview').src = currentPersonaAvatarUrl;
+  document.getElementById('faceGenStatus').textContent = 'สร้างใบหน้าจำลองสำเร็จ';
+}
+
+function generateAiFace() {
+  const age = Number(document.getElementById('personaAgeInput').value) || 32;
+  const gender = document.getElementById('personaGenderInput').value === 'ชาย' ? 'Thai man' : 'Thai woman';
+  const statusEl = document.getElementById('faceGenStatus');
+  const btn = document.getElementById('genAiFaceBtn');
+
+  faceSeed += 1;
+  const prompt = `realistic headshot portrait of a ${age} year old ${gender} patient in hospital clinic, natural lighting, looking at camera, worried expression`;
+  const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=384&height=384&nologo=true&seed=${faceSeed}`;
+
+  statusEl.textContent = 'กำลังเจนภาพถ่ายใบหน้า AI...';
+  btn.disabled = true;
+
+  const img = new Image();
+  img.onload = () => {
+    currentPersonaAvatarUrl = url;
+    document.getElementById('personaFacePreview').src = url;
+    statusEl.textContent = 'เจนภาพถ่ายใบหน้าสำเร็จ!';
+    btn.disabled = false;
+  };
+  img.onerror = () => {
+    statusEl.textContent = 'ไม่สามารถเชื่อมต่อบริการเจนภาพ AI ได้ (ใช้ภาพจำลองแทน)';
+    btn.disabled = false;
+  };
+  img.src = url;
+}
+
+document.getElementById('openPersonaBtn').addEventListener('click', openPersonaModal);
+el.patientAvatar.addEventListener('click', openPersonaModal);
+document.getElementById('genVectorFaceBtn').addEventListener('click', () => refreshVectorFace(true));
+document.getElementById('genAiFaceBtn').addEventListener('click', generateAiFace);
+
+['personaAgeInput', 'personaGenderInput'].forEach((id) => {
+  document.getElementById(id).addEventListener('change', () => {
+    if (!currentPersonaAvatarUrl.startsWith('http')) {
+      refreshVectorFace(false);
+    }
+  });
+});
+
+document.getElementById('savePersonaBtn').addEventListener('click', async () => {
+  const c = getActiveCase();
+  if (!c) return;
+
+  const name = document.getElementById('personaNameInput').value.trim();
+  if (!name) {
+    alert('กรุณากรอกชื่อผู้ป่วย');
+    return;
+  }
+
+  c.patient.name = name;
+  c.patient.age = Number(document.getElementById('personaAgeInput').value) || 32;
+  c.patient.gender = document.getElementById('personaGenderInput').value;
+  c.patient.occupation = document.getElementById('personaOccupationInput').value.trim();
+  c.patient.personality = document.getElementById('personaTraitInput').value.trim();
+  c.patient.avatarUrl = currentPersonaAvatarUrl;
+
+  const res = await fetch('/api/cases', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(c)
+  });
+
+  if (res.ok) {
+    updatePatientHeader(c);
+    renderCaseList();
+    renderChat();
+    closeModal('personaModal');
+  }
+});
 
 // Init
 loadSettings();

@@ -52,11 +52,12 @@
     <main class="main-area">
       <header class="topbar">
         <div class="patient-summary">
-          <div class="avatar" id="patientAvatar">🧑</div>
+          <div class="avatar" id="patientAvatar" title="คลิกเพื่อปรับ Persona และเจนหน้าผู้ป่วย">🧑</div>
           <div>
             <div class="patient-title-row">
               <h2 id="patientName">เลือกเคสผู้ป่วย</h2>
               <span class="badge" id="patientDemographics">-</span>
+              <button class="btn-small btn-secondary" id="openPersonaBtn" title="พิมพ์ชื่อ อายุ และเจนหน้าผู้ป่วย">🎭 ปรับ Persona / เจนหน้า</button>
             </div>
             <p class="patient-occupation" id="patientOccupation">-</p>
           </div>
@@ -297,6 +298,57 @@
       </div>
       <div class="modal-footer">
         <button class="btn-primary close-modal" data-close="evalModal">ปิด</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Quick Persona & Face Generator -->
+  <div class="modal-backdrop hidden" id="personaModal">
+    <div class="modal">
+      <div class="modal-header">
+        <h3>ปรับ Persona &amp; เจนใบหน้าผู้ป่วย</h3>
+        <button class="btn-icon close-modal" data-close="personaModal">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="persona-face-section">
+          <img id="personaFacePreview" class="persona-face-img" alt="Patient Portrait" />
+          <div class="persona-face-actions">
+            <button type="button" class="btn-secondary btn-small" id="genVectorFaceBtn">🎲 เจนหน้าใหม่ (ทันที)</button>
+            <button type="button" class="btn-primary btn-small" id="genAiFaceBtn">✨ เจนภาพถ่ายสมจริง (AI)</button>
+          </div>
+          <span class="hint" id="faceGenStatus"></span>
+        </div>
+
+        <div class="form-grid">
+          <div class="form-group">
+            <label>ชื่อผู้ป่วย</label>
+            <input type="text" id="personaNameInput" placeholder="เช่น คุณสมหญิง รักดี" />
+          </div>
+          <div class="form-group">
+            <label>อายุ (ปี)</label>
+            <input type="number" id="personaAgeInput" min="1" max="120" value="32" />
+          </div>
+          <div class="form-group">
+            <label>เพศ</label>
+            <select id="personaGenderInput">
+              <option value="หญิง">หญิง</option>
+              <option value="ชาย">ชาย</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>อาชีพ</label>
+            <input type="text" id="personaOccupationInput" placeholder="เช่น พนักงานบริษัท" />
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label>บุคลิก / ท่าทาง / อารมณ์ (Persona)</label>
+          <textarea id="personaTraitInput" rows="3" placeholder="เช่น ดูวิตกกังวล เอามือกุมท้อง ตอบสั้นๆ"></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-secondary close-modal" data-close="personaModal">ยกเลิก</button>
+        <button class="btn-primary" id="savePersonaBtn">บันทึก Persona</button>
       </div>
     </div>
   </div>
