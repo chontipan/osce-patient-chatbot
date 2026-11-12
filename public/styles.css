@@ -456,8 +456,17 @@ button {
   background: rgba(15, 23, 42, 0.06);
 }
 
-.btn-icon.recording {
+.mic-btn {
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.mic-btn.recording {
   background: #fee2e2;
+  border-color: #ef4444;
+  color: #b91c1c;
   animation: pulse 1s infinite;
 }
 

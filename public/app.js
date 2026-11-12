@@ -413,31 +413,72 @@ function speakThai(text) {
 function setupSpeechRecognition() {
   const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!SpeechRec) {
-    el.micBtn.style.display = 'none';
+    el.micBtn.addEventListener('click', () => {
+      alert('เบราว์เซอร์นี้ไม่รองรับการรับเสียง (Web Speech API) กรุณาเปิดผ่าน Google Chrome หรือ Microsoft Edge');
+    });
     return;
   }
+
   const recognition = new SpeechRec();
   recognition.lang = 'th-TH';
-  recognition.interimResults = false;
+  recognition.interimResults = true;
+  recognition.continuous = false;
   let active = false;
+  let baseText = '';
 
   el.micBtn.addEventListener('click', () => {
     if (active) {
       recognition.stop();
     } else {
-      active = true;
-      el.micBtn.classList.add('recording');
-      recognition.start();
+      try {
+        window.speechSynthesis?.cancel();
+        stopTalkingAnimation();
+        baseText = el.chatInput.value.trim();
+        active = true;
+        el.micBtn.classList.add('recording');
+        el.micBtn.textContent = '🔴 กำลังฟัง... (กดเพื่อหยุด)';
+        recognition.start();
+      } catch (err) {
+        active = false;
+        el.micBtn.classList.remove('recording');
+        el.micBtn.textContent = '🎤 พูดซักประวัติ';
+      }
     }
   });
 
   recognition.onresult = (e) => {
-    const transcript = e.results[0][0].transcript;
-    el.chatInput.value = (el.chatInput.value ? el.chatInput.value + ' ' : '') + transcript;
+    let interim = '';
+    let finalTranscript = '';
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      const t = e.results[i][0].transcript;
+      if (e.results[i].isFinal) {
+        finalTranscript += t;
+      } else {
+        interim += t;
+      }
+    }
+    const combined = (finalTranscript || interim).trim();
+    el.chatInput.value = baseText ? `${baseText} ${combined}` : combined;
+
+    if (finalTranscript.trim()) {
+      recognition.stop();
+      sendMessage();
+    }
   };
+
+  recognition.onerror = (e) => {
+    active = false;
+    el.micBtn.classList.remove('recording');
+    el.micBtn.textContent = '🎤 พูดซักประวัติ';
+    if (e.error === 'not-allowed') {
+      alert('กรุณาอนุญาตการใช้ไมโครโฟน (Microphone Permission) ในเบราว์เซอร์ก่อนใช้งานครับ');
+    }
+  };
+
   recognition.onend = () => {
     active = false;
     el.micBtn.classList.remove('recording');
+    el.micBtn.textContent = '🎤 พูดซักประวัติ';
   };
 }
 
