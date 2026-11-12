@@ -261,6 +261,30 @@ const server = http.createServer(async (req, res) => {
       return sendJson(res, 200, { cases });
     }
 
+    // API: Thai TTS Audio fallback
+    if (req.method === 'GET' && pathname === '/api/tts') {
+      const text = (reqUrl.searchParams.get('text') || '').slice(0, 200).trim();
+      if (!text) {
+        res.writeHead(400);
+        return res.end('Missing text');
+      }
+      const ttsUrl = `https://translate.google.com/translate_tts?ie=UTF-8&tl=th&client=tw-ob&q=${encodeURIComponent(text)}`;
+      const upstream = await fetch(ttsUrl, {
+        headers: { 'User-Agent': 'Mozilla/5.0' }
+      });
+      if (!upstream.ok) {
+        res.writeHead(502);
+        return res.end('TTS upstream error');
+      }
+      const buf = Buffer.from(await upstream.arrayBuffer());
+      res.writeHead(200, {
+        'Content-Type': 'audio/mpeg',
+        'Content-Length': buf.length,
+        'Cache-Control': 'public, max-age=3600'
+      });
+      return res.end(buf);
+    }
+
     // API: Save (create or update) a case
     if (req.method === 'POST' && pathname === '/api/cases') {
       const body = await readBody(req);

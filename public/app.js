@@ -6,7 +6,7 @@ const state = {
   timerSeconds: 480,
   timerInterval: null,
   timerRunning: false,
-  autoTTS: false,
+  autoTTS: true,
   aiConfig: {
     mode: 'offline',
     provider: 'gemini',
@@ -350,19 +350,62 @@ function startTalkingAnimation(durationMs = 2500) {
 }
 
 // Speech (TTS & STT)
-function speakThai(text) {
-  if (!('speechSynthesis' in window)) {
+let activeAudio = null;
+
+function playAudioFallback(cleanText) {
+  if (!cleanText) return;
+  try {
+    if (activeAudio) {
+      activeAudio.pause();
+      activeAudio = null;
+    }
+    const audio = new Audio(`/api/tts?text=${encodeURIComponent(cleanText.slice(0, 200))}`);
+    activeAudio = audio;
+    audio.onplay = () => startTalkingAnimation(0);
+    audio.onended = () => stopTalkingAnimation();
+    audio.onerror = () => stopTalkingAnimation();
+    audio.play().catch(() => {
+      startTalkingAnimation(Math.min(4500, Math.max(1500, cleanText.length * 55)));
+    });
+  } catch {
     startTalkingAnimation(2500);
-    return;
   }
-  window.speechSynthesis.cancel();
+}
+
+function speakThai(text) {
   const clean = text.replace(/\([^)]*\)/g, '').trim();
+  if (!clean) return;
+
+  if (!('speechSynthesis' in window)) {
+    return playAudioFallback(clean);
+  }
+
+  const voices = window.speechSynthesis.getVoices();
+  const thaiVoices = voices.filter((v) => v.lang && v.lang.toLowerCase().startsWith('th'));
+
+  // If browser has no Thai TTS voices loaded, use server /api/tts audio fallback
+  if (voices.length > 0 && thaiVoices.length === 0) {
+    return playAudioFallback(clean);
+  }
+
+  window.speechSynthesis.cancel();
   const utter = new SpeechSynthesisUtterance(clean);
   utter.lang = 'th-TH';
+
+  const activeCase = getActiveCase();
+  const isMale = activeCase?.patient?.gender === 'ชาย';
+  if (thaiVoices.length > 0) {
+    const preferred = thaiVoices.find((v) =>
+      isMale ? /niwat|pattara|male/i.test(v.name) : /premwadee|female/i.test(v.name)
+    );
+    utter.voice = preferred || thaiVoices[0];
+  }
+
+  utter.pitch = isMale ? 0.92 : 1.08;
   utter.rate = 1.0;
   utter.onstart = () => startTalkingAnimation(0);
   utter.onend = () => stopTalkingAnimation();
-  utter.onerror = () => stopTalkingAnimation();
+  utter.onerror = () => playAudioFallback(clean);
   startTalkingAnimation(Math.min(6000, Math.max(1500, clean.length * 65)));
   window.speechSynthesis.speak(utter);
 }
